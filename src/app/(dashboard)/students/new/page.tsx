@@ -8,6 +8,7 @@ import { Button } from '@/components/ui/Button';
 import { Input } from '@/components/ui/Input';
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from '@/components/ui/Card';
 import { ArrowLeft, User, Mountain, HeartPulse } from 'lucide-react';
+import { getOrInitUserOrganization } from '@/lib/supabase/get-org';
 
 export default function NewStudentPage() {
   const router = useRouter();
@@ -51,23 +52,13 @@ export default function NewStudentPage() {
 
       if (!user) throw new Error('No se encontró sesión activa.');
 
-      const { data: memberData, error: memberError } = await supabase
-        .from('organization_members')
-        .select('organization_id')
-        .eq('user_id', user.id)
-        .order('id', { ascending: true })
-        .limit(1)
-        .single();
-
-      if (memberError || !memberData) {
-        throw new Error('No se encontró una organización asociada a tu usuario.');
-      }
+      const { organizationId } = await getOrInitUserOrganization(supabase, user.id);
 
       // 2. Insertar alumno
       const { data: newStudent, error: insertError } = await supabase
         .from('students')
         .insert({
-          organization_id: memberData.organization_id,
+          organization_id: organizationId,
           first_name: firstName.trim(),
           last_name: lastName.trim(),
           email: email.trim() || null,
