@@ -9,6 +9,8 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Logo } from '@/components/layout/Logo';
 import { Mountain, ShieldCheck, Activity, BarChart2 } from 'lucide-react';
 
+export const dynamic = 'force-dynamic';
+
 export default function LoginPage() {
   const router = useRouter();
   const supabase = createClient();
