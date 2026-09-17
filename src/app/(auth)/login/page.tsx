@@ -34,11 +34,12 @@ export default function LoginPage() {
     try {
       if (mode === 'login') {
         const { error: signInError } = await supabase.auth.signInWithPassword({
-          email,
+          email: email.trim(),
           password,
         });
 
         if (signInError) throw signInError;
+
         router.push('/dashboard');
         router.refresh();
       } else {
@@ -48,45 +49,41 @@ export default function LoginPage() {
         }
 
         const { data: signUpData, error: signUpError } = await supabase.auth.signUp({
-          email,
+          email: email.trim(),
           password,
           options: {
             data: {
-              first_name: firstName,
-              last_name: lastName,
+              first_name: firstName.trim(),
+              last_name: lastName.trim(),
             },
           },
         });
 
         if (signUpError) throw signUpError;
-        const user = signUpData.user;
 
-        if (user) {
-          // Crear organización inicial y membresía owner
-          const slug = orgName.toLowerCase().replace(/[^a-z0-9]+/g, '-') + '-' + Math.floor(Math.random() * 1000);
-          const { data: orgData, error: orgError } = await supabase
-            .from('organizations')
-            .insert({
-              name: orgName.trim(),
-              slug,
-            })
-            .select()
-            .single();
+        // Si se inició sesión automáticamente (confirmación automática)
+        if (signUpData.session) {
+          const slug =
+            orgName.toLowerCase().replace(/[^a-z0-9]+/g, '-') +
+            '-' +
+            Math.floor(Math.random() * 10000);
 
-          if (!orgError && orgData) {
-            await supabase.from('organization_members').insert({
-              organization_id: orgData.id,
-              user_id: user.id,
-              role: 'owner',
-            });
-          }
+          await supabase.rpc('create_organization_and_owner', {
+            p_name: orgName.trim(),
+            p_slug: slug,
+          });
+
+          setSuccess('¡Cuenta creada con éxito! Ingresando al panel...');
+          setTimeout(() => {
+            router.push('/dashboard');
+            router.refresh();
+          }, 800);
+        } else {
+          setSuccess(
+            '¡Registro exitoso! Por favor revisá tu casilla de correo para confirmar tu cuenta y luego iniciá sesión.'
+          );
+          setMode('login');
         }
-
-        setSuccess('¡Cuenta creada con éxito! Iniciando sesión...');
-        setTimeout(() => {
-          router.push('/dashboard');
-          router.refresh();
-        }, 1000);
       }
     } catch (err: unknown) {
       if (err instanceof Error) {
@@ -103,7 +100,6 @@ export default function LoginPage() {
     <div className="min-h-screen flex flex-col md:flex-row bg-bardia-snow">
       {/* Columna Izquierda: Branding e Inspiración Neuquina */}
       <div className="md:w-1/2 bg-bardia-blue text-white p-8 md:p-16 flex flex-col justify-between relative overflow-hidden">
-        {/* Decoración gráfica de barda */}
         <div className="absolute -right-20 -bottom-20 opacity-10 pointer-events-none">
           <svg width="600" height="400" viewBox="0 0 600 400" fill="none" xmlns="http://www.w3.org/2000/svg">
             <path d="M0 400L150 220L300 290L450 140L600 400H0Z" fill="currentColor" />
@@ -180,6 +176,7 @@ export default function LoginPage() {
                 onClick={() => {
                   setMode('login');
                   setError(null);
+                  setSuccess(null);
                 }}
                 className={`flex-1 py-1.5 text-xs font-semibold rounded transition-all ${
                   mode === 'login'
@@ -194,6 +191,7 @@ export default function LoginPage() {
                 onClick={() => {
                   setMode('register');
                   setError(null);
+                  setSuccess(null);
                 }}
                 className={`flex-1 py-1.5 text-xs font-semibold rounded transition-all ${
                   mode === 'register'

@@ -29,13 +29,24 @@ export async function updateSession(request: NextRequest) {
     },
   });
 
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  let user = null;
+  try {
+    const { data } = await supabase.auth.getUser();
+    user = data.user;
+  } catch {
+    user = null;
+  }
 
   const isAuthRoute =
     request.nextUrl.pathname.startsWith('/login') ||
     request.nextUrl.pathname.startsWith('/forgot-password');
+
+  // Si está en la raíz /
+  if (request.nextUrl.pathname === '/') {
+    const url = request.nextUrl.clone();
+    url.pathname = user ? '/dashboard' : '/login';
+    return NextResponse.redirect(url);
+  }
 
   // Si no está autenticado y no es ruta de auth ni estática, redirigir a /login
   if (
@@ -43,7 +54,8 @@ export async function updateSession(request: NextRequest) {
     !isAuthRoute &&
     !request.nextUrl.pathname.startsWith('/_next') &&
     !request.nextUrl.pathname.startsWith('/api') &&
-    request.nextUrl.pathname !== '/'
+    !request.nextUrl.pathname.endsWith('.svg') &&
+    !request.nextUrl.pathname.endsWith('.ico')
   ) {
     const url = request.nextUrl.clone();
     url.pathname = '/login';
