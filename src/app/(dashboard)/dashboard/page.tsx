@@ -1,6 +1,8 @@
 import React from 'react';
 import Link from 'next/link';
+import { redirect } from 'next/navigation';
 import { createClient } from '@/lib/supabase/server';
+import { getOrInitUserOrganization } from '@/lib/supabase/get-org';
 import { StatCard } from '@/components/ui/StatCard';
 import { Button } from '@/components/ui/Button';
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/Card';
@@ -21,16 +23,28 @@ import {
 export default async function DashboardPage() {
   const supabase = await createClient();
 
-  // Consultar alumnos
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+
+  if (!user) {
+    redirect('/login');
+  }
+
+  const { organizationId } = await getOrInitUserOrganization(supabase, user.id);
+
+  // Consultar alumnos del tenant
   const { data: students } = await supabase
     .from('students')
     .select('*')
+    .eq('organization_id', organizationId)
     .order('created_at', { ascending: false });
 
-  // Consultar entrenamientos recientes con datos del alumno
+  // Consultar entrenamientos recientes del tenant con datos del alumno
   const { data: workouts } = await supabase
     .from('workouts')
     .select('*, student:students(first_name, last_name, discipline)')
+    .eq('organization_id', organizationId)
     .order('workout_date', { ascending: false })
     .limit(8);
 

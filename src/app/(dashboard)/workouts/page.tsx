@@ -1,19 +1,32 @@
 import React from 'react';
 import Link from 'next/link';
+import { redirect } from 'next/navigation';
 import { createClient } from '@/lib/supabase/server';
+import { getOrInitUserOrganization } from '@/lib/supabase/get-org';
 import { Button } from '@/components/ui/Button';
 import { Card, CardContent } from '@/components/ui/Card';
 import { Badge } from '@/components/ui/Badge';
 import { EmptyState } from '@/components/ui/EmptyState';
 import { formatPace, formatDuration, formatDate } from '@/lib/utils';
-import { Plus, Activity, Mountain, Calendar, User } from 'lucide-react';
+import { Plus, Activity } from 'lucide-react';
 
 export default async function WorkoutsPage() {
   const supabase = await createClient();
 
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+
+  if (!user) {
+    redirect('/login');
+  }
+
+  const { organizationId } = await getOrInitUserOrganization(supabase, user.id);
+
   const { data: workouts } = await supabase
     .from('workouts')
     .select('*, student:students(id, first_name, last_name, discipline)')
+    .eq('organization_id', organizationId)
     .order('workout_date', { ascending: false });
 
   return (
@@ -103,6 +116,7 @@ export default async function WorkoutsPage() {
           title="No hay entrenamientos cargados"
           description="Comenzá a registrar los entrenamientos de tus alumnos para medir su progreso."
           actionLabel="Cargar Primer Entrenamiento"
+          actionHref="/workouts/new"
         />
       )}
     </div>

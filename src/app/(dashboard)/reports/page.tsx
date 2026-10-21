@@ -1,19 +1,32 @@
 import React from 'react';
 import Link from 'next/link';
+import { redirect } from 'next/navigation';
 import { createClient } from '@/lib/supabase/server';
+import { getOrInitUserOrganization } from '@/lib/supabase/get-org';
 import { Button } from '@/components/ui/Button';
 import { Card, CardContent } from '@/components/ui/Card';
 import { Badge } from '@/components/ui/Badge';
 import { EmptyState } from '@/components/ui/EmptyState';
 import { formatDate } from '@/lib/utils';
-import { Plus, FileText, ChevronRight, Download, Calendar } from 'lucide-react';
+import { Plus, FileText, ChevronRight, Calendar } from 'lucide-react';
 
 export default async function ReportsPage() {
   const supabase = await createClient();
 
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+
+  if (!user) {
+    redirect('/login');
+  }
+
+  const { organizationId } = await getOrInitUserOrganization(supabase, user.id);
+
   const { data: reports } = await supabase
     .from('reports')
     .select('*, student:students(id, first_name, last_name, discipline)')
+    .eq('organization_id', organizationId)
     .order('created_at', { ascending: false });
 
   return (
@@ -83,6 +96,7 @@ export default async function ReportsPage() {
           title="Sin informes generados"
           description="Seleccioná un alumno y un rango de fechas para crear el primer informe editorial en PDF."
           actionLabel="Generar Primer Informe"
+          actionHref="/reports/new"
         />
       )}
     </div>

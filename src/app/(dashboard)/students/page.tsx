@@ -1,18 +1,31 @@
 import React from 'react';
 import Link from 'next/link';
+import { redirect } from 'next/navigation';
 import { createClient } from '@/lib/supabase/server';
+import { getOrInitUserOrganization } from '@/lib/supabase/get-org';
 import { Button } from '@/components/ui/Button';
 import { Card, CardContent } from '@/components/ui/Card';
 import { Badge } from '@/components/ui/Badge';
 import { EmptyState } from '@/components/ui/EmptyState';
-import { Plus, Users, Search, ChevronRight, Phone, HeartPulse } from 'lucide-react';
+import { Plus, Users, ChevronRight, HeartPulse } from 'lucide-react';
 
 export default async function StudentsPage() {
   const supabase = await createClient();
 
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+
+  if (!user) {
+    redirect('/login');
+  }
+
+  const { organizationId } = await getOrInitUserOrganization(supabase, user.id);
+
   const { data: students } = await supabase
     .from('students')
     .select('*')
+    .eq('organization_id', organizationId)
     .order('last_name', { ascending: true });
 
   return (
@@ -39,14 +52,21 @@ export default async function StudentsPage() {
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
           {students.map((student) => (
             <Link key={student.id} href={`/students/${student.id}`} className="block group">
-              <Card className="h-full transition-all group-hover:border-bardia-cyan group-hover:shadow-md">
+              <Card className={`h-full transition-all group-hover:border-bardia-cyan group-hover:shadow-md ${!student.is_active ? 'opacity-70 bg-bardia-snow/60' : ''}`}>
                 <CardContent className="p-5 flex flex-col justify-between h-full">
                   <div>
                     <div className="flex items-start justify-between gap-2 mb-3">
                       <div>
-                        <h2 className="text-base font-bold text-bardia-blue group-hover:text-bardia-blue/90">
-                          {student.last_name}, {student.first_name}
-                        </h2>
+                        <div className="flex items-center gap-2">
+                          <h2 className="text-base font-bold text-bardia-blue group-hover:text-bardia-blue/90">
+                            {student.last_name}, {student.first_name}
+                          </h2>
+                          {!student.is_active && (
+                            <Badge variant="outline" className="text-[9px] text-amber-700 border-amber-300 bg-amber-50">
+                              Archivado
+                            </Badge>
+                          )}
+                        </div>
                         <div className="text-xs text-bardia-rock/60 mt-0.5">
                           {student.email || 'Sin correo cargado'}
                         </div>
@@ -94,6 +114,7 @@ export default async function StudentsPage() {
           title="No hay alumnos registrados"
           description="Agregá tu primer alumno para comenzar a registrar sus sesiones deportivas y documentación médica."
           actionLabel="Registrar Alumno"
+          actionHref="/students/new"
         />
       )}
     </div>

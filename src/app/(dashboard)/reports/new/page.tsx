@@ -9,6 +9,7 @@ import { Button } from '@/components/ui/Button';
 import { Input } from '@/components/ui/Input';
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from '@/components/ui/Card';
 import { ArrowLeft, FileText, Calendar, CheckCircle2 } from 'lucide-react';
+import { getOrInitUserOrganization } from '@/lib/supabase/get-org';
 
 function ReportFormContent() {
   const router = useRouter();
@@ -30,10 +31,20 @@ function ReportFormContent() {
 
   useEffect(() => {
     async function loadStudents() {
+      const {
+        data: { user },
+      } = await supabase.auth.getUser();
+
+      if (!user) return;
+
+      const { organizationId } = await getOrInitUserOrganization(supabase, user.id);
+
       const { data } = await supabase
         .from('students')
         .select('*')
+        .eq('organization_id', organizationId)
         .order('last_name', { ascending: true });
+
       if (data) {
         setStudents(data);
         if (!preselectedStudentId && data.length > 0) {
@@ -55,16 +66,21 @@ function ReportFormContent() {
     setIsLoading(true);
 
     try {
+      const {
+        data: { user },
+      } = await supabase.auth.getUser();
+
       const studentIdNum = parseInt(selectedStudentId, 10);
       const student = students.find((s) => s.id === studentIdNum);
 
       if (!student) throw new Error('Alumno no encontrado.');
 
-      // 1. Obtener sesiones del período para congelar el snapshot métrico
+      // 1. Obtener sesiones del período asegurando aislamiento de organización
       const { data: periodWorkouts } = await supabase
         .from('workouts')
         .select('*')
         .eq('student_id', studentIdNum)
+        .eq('organization_id', student.organization_id)
         .gte('workout_date', dateFrom)
         .lte('workout_date', dateTo)
         .order('workout_date', { ascending: true });
@@ -96,12 +112,13 @@ function ReportFormContent() {
         workouts_list: workoutsList,
       };
 
-      // 2. Insertar informe
+      // 2. Insertar informe con created_by
       const { data: newReport, error: insertError } = await supabase
         .from('reports')
         .insert({
           organization_id: student.organization_id,
           student_id: studentIdNum,
+          created_by: user?.id || null,
           title: title.trim(),
           date_from: dateFrom,
           date_to: dateTo,

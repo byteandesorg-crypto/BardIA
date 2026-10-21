@@ -12,6 +12,11 @@ export const metadata: Metadata = {
   title: 'BARDIA — Plataforma para Entrenadores de Montaña y Running',
   description: 'Gestión centralizada de alumnos, registro de entrenamientos, métricas de rendimiento, análisis de evolución e informes profesionales para coaches.',
   keywords: ['running', 'trail running', 'entrenamiento', 'rendimiento deportivo', 'bardas', 'informes', 'métricas'],
+  icons: {
+    icon: '/icon.svg',
+    shortcut: '/icon.svg',
+    apple: '/icon.svg',
+  },
 };
 
 export default function RootLayout({

@@ -1,6 +1,7 @@
 import React from 'react';
 import { notFound } from 'next/navigation';
 import { createClient } from '@/lib/supabase/server';
+import { getOrInitUserOrganization } from '@/lib/supabase/get-org';
 import { ReportDetailClient } from './ReportDetailClient';
 
 interface PageProps {
@@ -17,10 +18,21 @@ export default async function ReportDetailPage({ params }: PageProps) {
 
   const supabase = await createClient();
 
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+
+  if (!user) {
+    notFound();
+  }
+
+  const { organizationId } = await getOrInitUserOrganization(supabase, user.id);
+
   const { data: report, error } = await supabase
     .from('reports')
     .select('*, student:students(*), organization:organizations(name)')
     .eq('id', reportId)
+    .eq('organization_id', organizationId)
     .single();
 
   if (error || !report) {

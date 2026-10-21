@@ -6,11 +6,14 @@ import { useRouter } from 'next/navigation';
 import { createClient } from '@/lib/supabase/client';
 import { Student, Workout, StudentDocument } from '@/types/database';
 import { Button } from '@/components/ui/Button';
+import { Input } from '@/components/ui/Input';
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from '@/components/ui/Card';
 import { Badge } from '@/components/ui/Badge';
 import { StatCard } from '@/components/ui/StatCard';
 import { EmptyState } from '@/components/ui/EmptyState';
 import { formatPace, formatDuration, formatDate } from '@/lib/utils';
+import { CombinedEvolutionChart } from '@/components/charts/CombinedEvolutionChart';
+import { WorkoutTypeEvolution } from '@/components/charts/WorkoutTypeEvolution';
 import {
   ResponsiveContainer,
   AreaChart,
@@ -36,6 +39,11 @@ import {
   Layers,
   BarChart2,
   FileCheck,
+  Edit3,
+  Archive,
+  RotateCcw,
+  X,
+  Check,
 } from 'lucide-react';
 
 interface StudentProfileViewProps {
@@ -52,14 +60,36 @@ export function StudentProfileView({
   const router = useRouter();
   const supabase = createClient();
 
+  const [currentStudent, setCurrentStudent] = useState<Student>(student);
   const [activeTab, setActiveTab] = useState<'resumen' | 'datos' | 'entrenamientos' | 'evolucion' | 'comparacion' | 'documentos'>('resumen');
-  const [workouts] = useState<Workout[]>(initialWorkouts);
+  const [workouts, setWorkouts] = useState<Workout[]>(initialWorkouts);
   const [documents, setDocuments] = useState<StudentDocument[]>(initialDocuments);
   const [isUploadingDoc, setIsUploadingDoc] = useState(false);
   const [docTitle, setDocTitle] = useState('');
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
 
-  // Evolución: selección de métrica para graficar
+  // Modal de edición del alumno
+  const [isEditModalOpen, setIsEditModalOpen] = useState(false);
+  const [isSavingStudent, setIsSavingStudent] = useState(false);
+  const [editFirstName, setEditFirstName] = useState(student.first_name);
+  const [editLastName, setEditLastName] = useState(student.last_name);
+  const [editEmail, setEditEmail] = useState(student.email || '');
+  const [editPhone, setEditPhone] = useState(student.phone || '');
+  const [editBirthDate, setEditBirthDate] = useState(student.birth_date || '');
+  const [editIdNumber, setEditIdNumber] = useState(student.id_number || '');
+  const [editDiscipline, setEditDiscipline] = useState(student.discipline);
+  const [editLevel, setEditLevel] = useState(student.level);
+  const [editSportGoals, setEditSportGoals] = useState(student.sport_goals || '');
+  const [editCoachNotes, setEditCoachNotes] = useState(student.coach_notes || '');
+  const [editEmergencyName, setEditEmergencyName] = useState(student.emergency_contact_name || '');
+  const [editEmergencyPhone, setEditEmergencyPhone] = useState(student.emergency_contact_phone || '');
+  const [editEmergencyRelation, setEditEmergencyRelation] = useState(student.emergency_contact_relation || '');
+  const [editInsurance, setEditInsurance] = useState(student.medical_insurance || '');
+  const [editInsuranceNumber, setEditInsuranceNumber] = useState(student.medical_insurance_number || '');
+  const [editEmergencyNotes, setEditEmergencyNotes] = useState(student.emergency_notes || '');
+
+  // Evolución: modo de visualización y selección de métrica
+  const [evolutionViewMode, setEvolutionViewMode] = useState<'combined' | 'by_type' | 'individual'>('combined');
   const [evolutionMetric, setEvolutionMetric] = useState<'distance_km' | 'elevation_gain_m' | 'average_pace_sec_km'>('distance_km');
 
   // Comparación: meses seleccionados
@@ -101,6 +131,104 @@ export function StudentProfileView({
   const prevElev = previousWorkouts.reduce((acc, w) => acc + (Number(w.elevation_gain_m) || 0), 0);
   const deltaElev = prevElev > 0 ? ((recentElev - prevElev) / prevElev) * 100 : 0;
 
+  // Edición del alumno
+  const handleSaveStudent = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setIsSavingStudent(true);
+    try {
+      const updatedFields = {
+        first_name: editFirstName.trim(),
+        last_name: editLastName.trim(),
+        email: editEmail.trim() || null,
+        phone: editPhone.trim() || null,
+        birth_date: editBirthDate || null,
+        id_number: editIdNumber.trim() || null,
+        discipline: editDiscipline,
+        level: editLevel,
+        sport_goals: editSportGoals.trim() || null,
+        coach_notes: editCoachNotes.trim() || null,
+        emergency_contact_name: editEmergencyName.trim() || null,
+        emergency_contact_phone: editEmergencyPhone.trim() || null,
+        emergency_contact_relation: editEmergencyRelation.trim() || null,
+        medical_insurance: editInsurance.trim() || null,
+        medical_insurance_number: editInsuranceNumber.trim() || null,
+        emergency_notes: editEmergencyNotes.trim() || null,
+        updated_at: new Date().toISOString(),
+      };
+
+      const { data, error } = await supabase
+        .from('students')
+        .update(updatedFields)
+        .eq('id', currentStudent.id)
+        .eq('organization_id', currentStudent.organization_id)
+        .select()
+        .single();
+
+      if (error) throw error;
+      if (data) {
+        setCurrentStudent(data);
+      }
+      setIsEditModalOpen(false);
+      router.refresh();
+    } catch (err) {
+      console.error('Error al actualizar alumno:', err);
+      alert('Error al guardar los cambios del alumno.');
+    } finally {
+      setIsSavingStudent(false);
+    }
+  };
+
+  // Baja lógica / reactivación del alumno
+  const handleToggleActive = async () => {
+    const nextStatus = !currentStudent.is_active;
+    const confirmMsg = nextStatus
+      ? '¿Reactivar el seguimiento deportivo de este alumno?'
+      : '¿Archivar este alumno? Podrás reactivarlo en cualquier momento.';
+
+    if (!confirm(confirmMsg)) return;
+
+    try {
+      const { data, error } = await supabase
+        .from('students')
+        .update({
+          is_active: nextStatus,
+          updated_at: new Date().toISOString(),
+        })
+        .eq('id', currentStudent.id)
+        .eq('organization_id', currentStudent.organization_id)
+        .select()
+        .single();
+
+      if (error) throw error;
+      if (data) {
+        setCurrentStudent(data);
+      }
+      router.refresh();
+    } catch (err) {
+      console.error('Error al alternar estado del alumno:', err);
+      alert('No se pudo cambiar el estado del alumno.');
+    }
+  };
+
+  // Eliminación de entrenamiento
+  const handleDeleteWorkout = async (workoutId: number) => {
+    if (!confirm('¿Estás seguro de eliminar esta sesión de entrenamiento?')) return;
+    try {
+      const { error } = await supabase
+        .from('workouts')
+        .delete()
+        .eq('id', workoutId)
+        .eq('organization_id', currentStudent.organization_id);
+
+      if (error) throw error;
+      setWorkouts((prev) => prev.filter((w) => w.id !== workoutId));
+      router.refresh();
+    } catch (err) {
+      console.error('Error al eliminar entrenamiento:', err);
+      alert('No se pudo eliminar el entrenamiento.');
+    }
+  };
+
   // Subida de documentos
   const handleUploadDocument = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -108,8 +236,7 @@ export function StudentProfileView({
 
     setIsUploadingDoc(true);
     try {
-      const fileExt = selectedFile.name.split('.').pop();
-      const filePath = `org_${student.organization_id}/student_${student.id}/${Date.now()}_${selectedFile.name}`;
+      const filePath = `org_${currentStudent.organization_id}/student_${currentStudent.id}/${Date.now()}_${selectedFile.name}`;
 
       // 1. Subir al bucket privado
       const { error: uploadError } = await supabase.storage
@@ -125,8 +252,8 @@ export function StudentProfileView({
       const { data: newDoc, error: dbError } = await supabase
         .from('student_documents')
         .insert({
-          organization_id: student.organization_id,
-          student_id: student.id,
+          organization_id: currentStudent.organization_id,
+          student_id: currentStudent.id,
           title: docTitle.trim(),
           file_path: filePath,
           file_name: selectedFile.name,
@@ -173,7 +300,11 @@ export function StudentProfileView({
     if (!confirm('¿Estás seguro de eliminar este documento?')) return;
     try {
       await supabase.storage.from('documents').remove([filePath]);
-      await supabase.from('student_documents').delete().eq('id', docId);
+      await supabase
+        .from('student_documents')
+        .delete()
+        .eq('id', docId)
+        .eq('organization_id', currentStudent.organization_id);
       setDocuments(documents.filter((d) => d.id !== docId));
       router.refresh();
     } catch (err) {
@@ -195,32 +326,71 @@ export function StudentProfileView({
           <div>
             <div className="flex items-center gap-2">
               <h1 className="text-2xl font-bold tracking-tight text-bardia-blue">
-                {student.first_name} {student.last_name}
+                {currentStudent.first_name} {currentStudent.last_name}
               </h1>
               <Badge variant="info" className="text-xs">
-                {student.discipline}
+                {currentStudent.discipline}
               </Badge>
               <Badge variant="outline" className="text-xs">
-                {student.level}
+                {currentStudent.level}
               </Badge>
+              {!currentStudent.is_active && (
+                <Badge variant="outline" className="text-[10px] text-amber-700 border-amber-300 bg-amber-50">
+                  Archivado
+                </Badge>
+              )}
             </div>
             <p className="text-xs text-bardia-rock/60 mt-0.5">
-              {student.email || 'Sin email'} • {student.phone || 'Sin teléfono'} • Alta: {formatDate(student.created_at)}
+              {currentStudent.email || 'Sin email'} • {currentStudent.phone || 'Sin teléfono'} • Alta: {formatDate(currentStudent.created_at)}
             </p>
           </div>
         </div>
 
-        <div className="flex items-center gap-2">
-          <Link href={`/workouts/new?student_id=${student.id}`}>
+        <div className="flex flex-wrap items-center gap-2">
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => setIsEditModalOpen(true)}
+            className="gap-1.5"
+          >
+            <Edit3 className="w-3.5 h-3.5 text-bardia-blue" />
+            <span>Editar</span>
+          </Button>
+
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={handleToggleActive}
+            className={`gap-1.5 text-xs ${
+              currentStudent.is_active
+                ? 'text-amber-700 hover:bg-amber-50 hover:text-amber-800'
+                : 'text-emerald-700 hover:bg-emerald-50 hover:text-emerald-800'
+            }`}
+          >
+            {currentStudent.is_active ? (
+              <>
+                <Archive className="w-3.5 h-3.5" />
+                <span>Archivar</span>
+              </>
+            ) : (
+              <>
+                <RotateCcw className="w-3.5 h-3.5" />
+                <span>Reactivar</span>
+              </>
+            )}
+          </Button>
+
+          <Link href={`/workouts/new?student_id=${currentStudent.id}`}>
             <Button size="sm" className="gap-1.5">
               <Plus className="w-4 h-4" />
               <span>Cargar Sesión</span>
             </Button>
           </Link>
-          <Link href={`/reports/new?student_id=${student.id}`}>
+
+          <Link href={`/reports/new?student_id=${currentStudent.id}`}>
             <Button variant="outline" size="sm" className="gap-1.5">
               <FileText className="w-4 h-4 text-bardia-green" />
-              <span>Generar Informe A4</span>
+              <span>Informe A4</span>
             </Button>
           </Link>
         </div>
@@ -524,90 +694,172 @@ export function StudentProfileView({
       {/* TAB 4: EVOLUCIÓN */}
       {activeTab === 'evolucion' && (
         <div className="space-y-6">
-          <Card>
-            <CardHeader className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-              <div>
-                <CardTitle>Curva de Evolución Temporal</CardTitle>
-                <CardDescription>Análisis de tendencia y progresión a través de los entrenamientos</CardDescription>
-              </div>
+          {/* Selector de Modo de Visualización Superior */}
+          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 bg-white p-4 rounded-lg border border-bardia-border shadow-xs">
+            <div>
+              <h3 className="text-base font-bold text-bardia-blue">Centro de Análisis y Progresión</h3>
+              <p className="text-xs text-bardia-rock/60 mt-0.5">
+                Visualizá el volumen, altimetría y velocidad de forma consolidada o desglosada por estímulo
+              </p>
+            </div>
 
-              {/* Selector de Métrica */}
-              <div className="flex bg-bardia-snow p-1 rounded-md border border-bardia-border text-xs font-semibold">
-                <button
-                  onClick={() => setEvolutionMetric('distance_km')}
-                  className={`px-3 py-1 rounded transition-all ${
-                    evolutionMetric === 'distance_km'
-                      ? 'bg-white text-bardia-blue shadow-xs font-bold'
-                      : 'text-bardia-rock/60 hover:text-bardia-rock'
-                  }`}
-                >
-                  Distancia (km)
-                </button>
-                <button
-                  onClick={() => setEvolutionMetric('elevation_gain_m')}
-                  className={`px-3 py-1 rounded transition-all ${
-                    evolutionMetric === 'elevation_gain_m'
-                      ? 'bg-white text-bardia-blue shadow-xs font-bold'
-                      : 'text-bardia-rock/60 hover:text-bardia-rock'
-                  }`}
-                >
-                  Desnivel (+m)
-                </button>
-                <button
-                  onClick={() => setEvolutionMetric('average_pace_sec_km')}
-                  className={`px-3 py-1 rounded transition-all ${
-                    evolutionMetric === 'average_pace_sec_km'
-                      ? 'bg-white text-bardia-blue shadow-xs font-bold'
-                      : 'text-bardia-rock/60 hover:text-bardia-rock'
-                  }`}
-                >
-                  Ritmo (min/km)
-                </button>
-              </div>
-            </CardHeader>
-            <CardContent>
-              {chartData.length >= 2 ? (
-                <div className="h-80 w-full pt-4">
-                  <ResponsiveContainer width="100%" height="100%">
-                    <AreaChart data={chartData} margin={{ top: 10, right: 20, left: 0, bottom: 0 }}>
-                      <defs>
-                        <linearGradient id="bardiaGradient" x1="0" y1="0" x2="0" y2="1">
-                          <stop offset="5%" stopColor="#72B7C9" stopOpacity={0.4} />
-                          <stop offset="95%" stopColor="#72B7C9" stopOpacity={0.0} />
-                        </linearGradient>
-                      </defs>
-                      <CartesianGrid strokeDasharray="3 3" stroke="#D9E0DE" vertical={false} />
-                      <XAxis dataKey="date" stroke="#172127" opacity={0.6} tick={{ fontSize: 11 }} />
-                      <YAxis stroke="#172127" opacity={0.6} tick={{ fontSize: 11 }} />
-                      <Tooltip
-                        contentStyle={{
-                          backgroundColor: '#17324D',
-                          color: '#FFFFFF',
-                          borderRadius: '8px',
-                          border: 'none',
-                          fontSize: '12px',
-                        }}
-                      />
-                      <Area
-                        type="monotone"
-                        dataKey={evolutionMetric}
-                        stroke="#17324D"
-                        strokeWidth={2.5}
-                        fillOpacity={1}
-                        fill="url(#bardiaGradient)"
-                      />
-                    </AreaChart>
-                  </ResponsiveContainer>
+            <div className="flex bg-bardia-snow p-1 rounded-md border border-bardia-border text-xs font-semibold shrink-0">
+              <button
+                type="button"
+                onClick={() => setEvolutionViewMode('combined')}
+                className={`flex items-center gap-1.5 px-3 py-1.5 rounded transition-all ${
+                  evolutionViewMode === 'combined'
+                    ? 'bg-bardia-blue text-white shadow-xs font-bold'
+                    : 'text-bardia-rock/60 hover:text-bardia-rock'
+                }`}
+              >
+                <Layers className="w-3.5 h-3.5" />
+                <span>3 en 1 (Combinado)</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setEvolutionViewMode('by_type')}
+                className={`flex items-center gap-1.5 px-3 py-1.5 rounded transition-all ${
+                  evolutionViewMode === 'by_type'
+                    ? 'bg-bardia-blue text-white shadow-xs font-bold'
+                    : 'text-bardia-rock/60 hover:text-bardia-rock'
+                }`}
+              >
+                <Activity className="w-3.5 h-3.5" />
+                <span>Por Tipo de Sesión</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setEvolutionViewMode('individual')}
+                className={`flex items-center gap-1.5 px-3 py-1.5 rounded transition-all ${
+                  evolutionViewMode === 'individual'
+                    ? 'bg-bardia-blue text-white shadow-xs font-bold'
+                    : 'text-bardia-rock/60 hover:text-bardia-rock'
+                }`}
+              >
+                <BarChart2 className="w-3.5 h-3.5" />
+                <span>Métrica Individual</span>
+              </button>
+            </div>
+          </div>
+
+          {/* MODO 1: GRÁFICO COMBINADO (3 EN 1) */}
+          {evolutionViewMode === 'combined' && (
+            <Card>
+              <CardHeader>
+                <div className="flex items-center gap-2">
+                  <Layers className="w-4 h-4 text-bardia-blue" />
+                  <CardTitle>Curva Combinada: Distancia, Desnivel y Ritmo</CardTitle>
                 </div>
-              ) : (
-                <EmptyState
-                  icon={TrendingUp}
-                  title="Insuficientes datos para graficar evolución"
-                  description="Se requieren al menos 2 entrenamientos registrados para proyectar la curva evolutiva."
-                />
-              )}
-            </CardContent>
-          </Card>
+                <CardDescription>
+                  Correlación simultánea entre el kilometraje recorrido (barras), la ganancia altimétrica (área) y la velocidad de carrera (línea)
+                </CardDescription>
+              </CardHeader>
+              <CardContent>
+                <CombinedEvolutionChart workouts={workouts} />
+              </CardContent>
+            </Card>
+          )}
+
+          {/* MODO 2: POR TIPO DE ENTRENAMIENTO */}
+          {evolutionViewMode === 'by_type' && (
+            <div className="space-y-4">
+              <WorkoutTypeEvolution workouts={workouts} />
+            </div>
+          )}
+
+          {/* MODO 3: MÉTRICA INDIVIDUAL (VISTA CLÁSICA) */}
+          {evolutionViewMode === 'individual' && (
+            <Card>
+              <CardHeader className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+                <div>
+                  <CardTitle>Curva de Métrica Individual</CardTitle>
+                  <CardDescription>Aislamiento de una única variable a lo largo del tiempo</CardDescription>
+                </div>
+
+                {/* Selector de Métrica */}
+                <div className="flex bg-bardia-snow p-1 rounded-md border border-bardia-border text-xs font-semibold">
+                  <button
+                    type="button"
+                    onClick={() => setEvolutionMetric('distance_km')}
+                    className={`px-3 py-1 rounded transition-all ${
+                      evolutionMetric === 'distance_km'
+                        ? 'bg-white text-bardia-blue shadow-xs font-bold'
+                        : 'text-bardia-rock/60 hover:text-bardia-rock'
+                    }`}
+                  >
+                    Distancia (km)
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setEvolutionMetric('elevation_gain_m')}
+                    className={`px-3 py-1 rounded transition-all ${
+                      evolutionMetric === 'elevation_gain_m'
+                        ? 'bg-white text-bardia-blue shadow-xs font-bold'
+                        : 'text-bardia-rock/60 hover:text-bardia-rock'
+                    }`}
+                  >
+                    Desnivel (+m)
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setEvolutionMetric('average_pace_sec_km')}
+                    className={`px-3 py-1 rounded transition-all ${
+                      evolutionMetric === 'average_pace_sec_km'
+                        ? 'bg-white text-bardia-blue shadow-xs font-bold'
+                        : 'text-bardia-rock/60 hover:text-bardia-rock'
+                    }`}
+                  >
+                    Ritmo (min/km)
+                  </button>
+                </div>
+              </CardHeader>
+              <CardContent>
+                {chartData.length >= 2 ? (
+                  <div className="h-80 w-full pt-4">
+                    <ResponsiveContainer width="100%" height="100%">
+                      <AreaChart data={chartData} margin={{ top: 10, right: 20, left: 0, bottom: 0 }}>
+                        <defs>
+                          <linearGradient id="bardiaGradient" x1="0" y1="0" x2="0" y2="1">
+                            <stop offset="5%" stopColor="#72B7C9" stopOpacity={0.4} />
+                            <stop offset="95%" stopColor="#72B7C9" stopOpacity={0.0} />
+                          </linearGradient>
+                        </defs>
+                        <CartesianGrid strokeDasharray="3 3" stroke="#D9E0DE" vertical={false} />
+                        <XAxis dataKey="date" stroke="#172127" opacity={0.6} tick={{ fontSize: 11 }} />
+                        <YAxis stroke="#172127" opacity={0.6} tick={{ fontSize: 11 }} />
+                        <Tooltip
+                          contentStyle={{
+                            backgroundColor: '#17324D',
+                            color: '#FFFFFF',
+                            borderRadius: '8px',
+                            border: 'none',
+                            fontSize: '12px',
+                          }}
+                        />
+                        <Area
+                          type="monotone"
+                          dataKey={evolutionMetric}
+                          stroke="#17324D"
+                          strokeWidth={2.5}
+                          fillOpacity={1}
+                          fill="url(#bardiaGradient)"
+                        />
+                      </AreaChart>
+                    </ResponsiveContainer>
+                  </div>
+                ) : (
+                  <EmptyState
+                    icon={TrendingUp}
+                    title="Insuficientes datos para graficar evolución"
+                    description="Se requieren al menos 2 entrenamientos registrados para proyectar la curva evolutiva."
+                  />
+                )}
+              </CardContent>
+            </Card>
+          )}
         </div>
       )}
 
@@ -809,6 +1061,186 @@ export function StudentProfileView({
               )}
             </CardContent>
           </Card>
+        </div>
+      )}
+
+      {/* MODAL DE EDICIÓN DEL ALUMNO */}
+      {isEditModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-bardia-rock/60 backdrop-blur-xs overflow-y-auto">
+          <div className="relative w-full max-w-2xl bg-white rounded-lg shadow-xl border border-bardia-border my-8 overflow-hidden">
+            <div className="flex items-center justify-between p-5 border-b border-bardia-border bg-bardia-snow">
+              <div className="flex items-center gap-2">
+                <Edit3 className="w-5 h-5 text-bardia-blue" />
+                <h3 className="text-base font-bold text-bardia-blue">
+                  Editar Alumno: {currentStudent.first_name} {currentStudent.last_name}
+                </h3>
+              </div>
+              <button
+                type="button"
+                onClick={() => setIsEditModalOpen(false)}
+                className="p-1 rounded-md text-bardia-rock/50 hover:text-bardia-rock hover:bg-bardia-stoneLight"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <form onSubmit={handleSaveStudent} className="p-6 space-y-6 max-h-[80vh] overflow-y-auto">
+              {/* Datos Personales */}
+              <div className="space-y-4">
+                <h4 className="text-xs font-bold text-bardia-blue uppercase tracking-wider border-b border-bardia-stoneLight pb-1">
+                  1. Información Personal
+                </h4>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  <Input
+                    label="Nombre *"
+                    required
+                    value={editFirstName}
+                    onChange={(e) => setEditFirstName(e.target.value)}
+                  />
+                  <Input
+                    label="Apellido *"
+                    required
+                    value={editLastName}
+                    onChange={(e) => setEditLastName(e.target.value)}
+                  />
+                  <Input
+                    label="Correo Electrónico"
+                    type="email"
+                    value={editEmail}
+                    onChange={(e) => setEditEmail(e.target.value)}
+                  />
+                  <Input
+                    label="Teléfono / WhatsApp"
+                    value={editPhone}
+                    onChange={(e) => setEditPhone(e.target.value)}
+                  />
+                  <Input
+                    label="Fecha de Nacimiento"
+                    type="date"
+                    value={editBirthDate}
+                    onChange={(e) => setEditBirthDate(e.target.value)}
+                  />
+                  <Input
+                    label="DNI / Documento"
+                    value={editIdNumber}
+                    onChange={(e) => setEditIdNumber(e.target.value)}
+                  />
+                </div>
+              </div>
+
+              {/* Datos Deportivos */}
+              <div className="space-y-4">
+                <h4 className="text-xs font-bold text-bardia-blue uppercase tracking-wider border-b border-bardia-stoneLight pb-1">
+                  2. Perfil Deportivo
+                </h4>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  <div className="space-y-1.5 text-left">
+                    <label className="block text-xs font-semibold text-bardia-rock uppercase tracking-wider">
+                      Disciplina
+                    </label>
+                    <select
+                      className="flex h-10 w-full rounded-md border border-bardia-border bg-white px-3 py-2 text-sm text-bardia-rock focus:border-bardia-cyan focus:outline-none"
+                      value={editDiscipline}
+                      onChange={(e) => setEditDiscipline(e.target.value)}
+                    >
+                      <option value="Trail Running">Trail Running</option>
+                      <option value="Running Calle">Running Calle</option>
+                      <option value="Trekking / Montaña">Trekking / Montaña</option>
+                      <option value="Ultra Trail">Ultra Trail</option>
+                      <option value="Acondicionamiento Físico">Acondicionamiento Físico</option>
+                    </select>
+                  </div>
+
+                  <div className="space-y-1.5 text-left">
+                    <label className="block text-xs font-semibold text-bardia-rock uppercase tracking-wider">
+                      Nivel Deportivo
+                    </label>
+                    <select
+                      className="flex h-10 w-full rounded-md border border-bardia-border bg-white px-3 py-2 text-sm text-bardia-rock focus:border-bardia-cyan focus:outline-none"
+                      value={editLevel}
+                      onChange={(e) => setEditLevel(e.target.value)}
+                    >
+                      <option value="Inicial / Principiante">Inicial / Principiante</option>
+                      <option value="Intermedio">Intermedio</option>
+                      <option value="Avanzado / Competitivo">Avanzado / Competitivo</option>
+                      <option value="Elite">Elite</option>
+                    </select>
+                  </div>
+                </div>
+
+                <Input
+                  label="Objetivos Deportivos"
+                  value={editSportGoals}
+                  onChange={(e) => setEditSportGoals(e.target.value)}
+                />
+
+                <div className="space-y-1.5 text-left">
+                  <label className="block text-xs font-semibold text-bardia-rock uppercase tracking-wider">
+                    Observaciones del Entrenador
+                  </label>
+                  <textarea
+                    rows={2}
+                    className="flex w-full rounded-md border border-bardia-border bg-white px-3 py-2 text-sm text-bardia-rock focus:border-bardia-cyan focus:outline-none"
+                    value={editCoachNotes}
+                    onChange={(e) => setEditCoachNotes(e.target.value)}
+                  />
+                </div>
+              </div>
+
+              {/* Ficha de Emergencia */}
+              <div className="space-y-4">
+                <h4 className="text-xs font-bold text-emerald-800 uppercase tracking-wider border-b border-emerald-200 pb-1">
+                  3. Información de Emergencia y Médica
+                </h4>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  <Input
+                    label="Contacto de Emergencia"
+                    value={editEmergencyName}
+                    onChange={(e) => setEditEmergencyName(e.target.value)}
+                  />
+                  <Input
+                    label="Teléfono de Emergencia"
+                    value={editEmergencyPhone}
+                    onChange={(e) => setEditEmergencyPhone(e.target.value)}
+                  />
+                  <Input
+                    label="Vínculo / Relación"
+                    value={editEmergencyRelation}
+                    onChange={(e) => setEditEmergencyRelation(e.target.value)}
+                  />
+                  <Input
+                    label="Obra Social / Prepaga"
+                    value={editInsurance}
+                    onChange={(e) => setEditInsurance(e.target.value)}
+                  />
+                  <Input
+                    label="Número de Afiliado"
+                    value={editInsuranceNumber}
+                    onChange={(e) => setEditInsuranceNumber(e.target.value)}
+                  />
+                  <Input
+                    label="Observaciones Médicas"
+                    value={editEmergencyNotes}
+                    onChange={(e) => setEditEmergencyNotes(e.target.value)}
+                  />
+                </div>
+              </div>
+
+              <div className="flex items-center justify-end gap-3 pt-4 border-t border-bardia-border">
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={() => setIsEditModalOpen(false)}
+                >
+                  Cancelar
+                </Button>
+                <Button type="submit" isLoading={isSavingStudent} className="gap-2">
+                  <Check className="w-4 h-4" />
+                  <span>Guardar Cambios</span>
+                </Button>
+              </div>
+            </form>
+          </div>
         </div>
       )}
     </div>

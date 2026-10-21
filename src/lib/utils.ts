@@ -8,9 +8,10 @@ export function cn(...inputs: ClassValue[]) {
 /** Formatea segundos a hh:mm:ss o mm:ss */
 export function formatDuration(seconds?: number | null): string {
   if (!seconds || seconds <= 0) return '00:00';
-  const hrs = Math.floor(seconds / 3600);
-  const mins = Math.floor((seconds % 3600) / 60);
-  const secs = seconds % 60;
+  const totalSecs = Math.round(seconds);
+  const hrs = Math.floor(totalSecs / 3600);
+  const mins = Math.floor((totalSecs % 3600) / 60);
+  const secs = totalSecs % 60;
 
   if (hrs > 0) {
     return `${hrs}h ${mins.toString().padStart(2, '0')}m`;
@@ -18,11 +19,12 @@ export function formatDuration(seconds?: number | null): string {
   return `${mins}:${secs.toString().padStart(2, '0')}`;
 }
 
-/** Formatea ritmo en segundos por km a mm:ss /km */
+/** Formatea ritmo en segundos por km a mm:ss /km evitando desbordes tipo 4:60 */
 export function formatPace(paceSecKm?: number | null): string {
   if (!paceSecKm || paceSecKm <= 0) return '-';
-  const mins = Math.floor(paceSecKm / 60);
-  const secs = Math.round(paceSecKm % 60);
+  const totalSecs = Math.round(paceSecKm);
+  const mins = Math.floor(totalSecs / 60);
+  const secs = totalSecs % 60;
   return `${mins}:${secs.toString().padStart(2, '0')} /km`;
 }
 
@@ -45,4 +47,10 @@ export function formatDate(dateString?: string | null): string {
   } catch {
     return dateString;
   }
+}
+
+/** Formatea desnivel en metros positivos (+X m) */
+export function formatElevation(meters?: number | null): string {
+  if (meters === null || meters === undefined || isNaN(meters)) return '-';
+  return `+${Math.round(meters).toLocaleString('es-AR')} m`;
 }

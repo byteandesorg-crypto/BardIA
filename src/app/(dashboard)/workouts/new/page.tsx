@@ -9,6 +9,7 @@ import { Button } from '@/components/ui/Button';
 import { Input } from '@/components/ui/Input';
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from '@/components/ui/Card';
 import { formatPace, calculatePace } from '@/lib/utils';
+import { getOrInitUserOrganization } from '@/lib/supabase/get-org';
 import { ArrowLeft, Activity, Mountain, Clock, Heart, Plus } from 'lucide-react';
 
 function WorkoutFormContent() {
@@ -48,10 +49,20 @@ function WorkoutFormContent() {
 
   useEffect(() => {
     async function loadStudents() {
+      const {
+        data: { user },
+      } = await supabase.auth.getUser();
+
+      if (!user) return;
+
+      const { organizationId } = await getOrInitUserOrganization(supabase, user.id);
+
       const { data } = await supabase
         .from('students')
         .select('*')
+        .eq('organization_id', organizationId)
         .order('last_name', { ascending: true });
+
       if (data) {
         setStudents(data);
         if (!preselectedStudentId && data.length > 0) {
@@ -73,6 +84,10 @@ function WorkoutFormContent() {
     setIsLoading(true);
 
     try {
+      const {
+        data: { user },
+      } = await supabase.auth.getUser();
+
       const studentIdNum = parseInt(selectedStudentId, 10);
       const student = students.find((s) => s.id === studentIdNum);
 
@@ -83,6 +98,7 @@ function WorkoutFormContent() {
         .insert({
           organization_id: student.organization_id,
           student_id: studentIdNum,
+          created_by: user?.id || null,
           workout_date: workoutDate,
           title: title.trim() || `${workoutType} - ${workoutDate}`,
           workout_type: workoutType,

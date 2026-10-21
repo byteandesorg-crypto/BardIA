@@ -1,6 +1,7 @@
 import React from 'react';
 import { redirect } from 'next/navigation';
 import { createClient } from '@/lib/supabase/server';
+import { getOrInitUserOrganization } from '@/lib/supabase/get-org';
 import { Sidebar } from '@/components/layout/Sidebar';
 import { Navbar } from '@/components/layout/Navbar';
 
@@ -19,31 +20,16 @@ export default async function DashboardLayout({
     redirect('/login');
   }
 
-  // Obtener membresía de organización del usuario de manera segura
-  const { data: membership } = await supabase
-    .from('organization_members')
-    .select('*, organization:organizations(*)')
-    .eq('user_id', user.id)
-    .order('id', { ascending: true })
-    .limit(1)
-    .maybeSingle();
+  // Obtener membresía u organización del usuario de manera segura
+  const { organizationId } = await getOrInitUserOrganization(supabase, user.id);
 
-  let organizationName = membership?.organization?.name;
+  const { data: org } = await supabase
+    .from('organizations')
+    .select('name')
+    .eq('id', organizationId)
+    .single();
 
-  // Si el usuario no tiene ninguna organización creada aún, crear una por defecto
-  if (!membership) {
-    const defaultName = 'Estudio de Entrenamiento';
-    const slug = 'org-' + user.id.slice(0, 8);
-    try {
-      await supabase.rpc('create_organization_and_owner', {
-        p_name: defaultName,
-        p_slug: slug,
-      });
-      organizationName = defaultName;
-    } catch {
-      organizationName = 'BARDIA Performance';
-    }
-  }
+  const organizationName = org?.name || 'BARDIA Performance';
 
   return (
     <div className="flex min-h-screen bg-bardia-snow">

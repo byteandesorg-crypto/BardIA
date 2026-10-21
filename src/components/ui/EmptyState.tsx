@@ -1,4 +1,5 @@
 import React from 'react';
+import Link from 'next/link';
 import { cn } from '@/lib/utils';
 import { Button } from './Button';
 
@@ -7,6 +8,7 @@ interface EmptyStateProps {
   title: string;
   description: string;
   actionLabel?: string;
+  actionHref?: string;
   onAction?: () => void;
   className?: string;
 }
@@ -16,6 +18,7 @@ export function EmptyState({
   title,
   description,
   actionLabel,
+  actionHref,
   onAction,
   className,
 }: EmptyStateProps) {
@@ -31,7 +34,12 @@ export function EmptyState({
       </div>
       <h3 className="text-base font-semibold text-bardia-blue mb-1">{title}</h3>
       <p className="text-xs text-bardia-rock/60 max-w-sm mb-6">{description}</p>
-      {actionLabel && onAction && (
+      {actionLabel && actionHref && (
+        <Link href={actionHref}>
+          <Button size="sm">{actionLabel}</Button>
+        </Link>
+      )}
+      {actionLabel && !actionHref && onAction && (
         <Button onClick={onAction} size="sm">
           {actionLabel}
         </Button>
