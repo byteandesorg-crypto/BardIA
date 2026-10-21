@@ -8,7 +8,7 @@ Este archivo define las reglas obligatorias de ingeniería, el sistema de skills
 
 ## 1. Stack Tecnológico
 
-- **Framework:** Next.js 15.2.1 (App Router).
+- **Framework:** Next.js 15.2.8 (App Router).
 - **Librería UI:** React 19.
 - **Tipado:** TypeScript 5.8 (Modo Estricto).
 - **Estilos:** Tailwind CSS 3.4 con Vanilla CSS para optimizaciones de impresión editorial.
